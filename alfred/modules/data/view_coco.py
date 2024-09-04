@@ -48,6 +48,7 @@ from alfred.vis.image.det import visualize_det_cv2_part
 from alfred.vis.image.common import get_unique_color_by_id
 import numpy as np
 from pprint import pprint
+from .resize import resize
 
 
 # USED_CATEGORIES_IDS = [i for i in range(1, 16)]
@@ -201,8 +202,10 @@ def vis_coco(coco_img_root, ann_f):
                               (0, 0, 0), -1)
                 cv2.putText(img, text_label, txt_bottom_left, font,
                             font_scale, (237, 237, 237), font_thickness, cv2.LINE_AA)
-            cv2.imshow('rr', img)
-            cv2.waitKey(0)
+            cv2.imshow('rr', resize(img))
+            key = cv2.waitKey(0) & 0xff
+            if key == ord('q'):
+                return
         else:
             im = cv2.imread(img_f)
             # plt.imshow(I)
@@ -211,8 +214,10 @@ def vis_coco(coco_img_root, ann_f):
             # plt.show()
             ori_im = showAnns(im, annos, True)
             if ori_im is not None:
-                cv2.imshow('aa', ori_im)
-                cv2.waitKey(0)
+                cv2.imshow('aa', resize(ori_im))
+                key = cv2.waitKey(0) & 0xff
+                if key == ord('q'):
+                    return
             else:
                 I = Image.open(img_f)
                 plt.imshow(I)

@@ -35,20 +35,23 @@ import os
 import sys
 import cv2
 from alfred.utils.log import logger as logging
+from .resize import resize
 
 
-def vis_det_yolo(img_root, label_root):
+def vis_det_yolo(img_root, label_root, output_root=None):
     logging.info('img root: {}, label root: {}'.format(img_root, label_root))
     # auto detection .jpg or .png images
     txt_files = glob(os.path.join(label_root, '*.txt'))
     for txt_f in txt_files:
-        img_f = os.path.join(img_root, os.path.basename(txt_f).split('.')[0] + '.jpg')
+        img_f = os.path.join(img_root, os.path.basename(txt_f).rsplit('.', maxsplit=1)[0] + '.jpg')
+        if not os.path.exists(img_f):
+            img_f = os.path.join(img_root, os.path.basename(txt_f).rsplit('.', maxsplit=1)[0] + '.png')
         if os.path.exists(img_f):
             img = cv2.imread(img_f)
             h, w, _ = img.shape
             if os.path.exists(txt_f):
                 with open(txt_f) as f:
-                    annos = f.readlines() 
+                    annos = f.readlines()
                     for ann in annos:
                         ann = ann.strip().split(' ')
                         category = ann[0]
@@ -63,8 +66,14 @@ def vis_det_yolo(img_root, label_root):
                         print(xmin, ymin, xmax, ymax, category)
                         cv2.putText(img, category, (xmin, ymin), cv2.FONT_HERSHEY_COMPLEX, 0.7, (255, 255, 255))
                         cv2.rectangle(img, (xmin, ymin), (xmax, ymax), (0, 255, 0), 2, 1)
-                cv2.imshow('yolo check', img)
-                cv2.waitKey(0)
+                print(img_f)
+                cv2.imshow('yolo check', resize(img))
+                if output_root is not None:
+                    os.makedirs(output_root, exist_ok=True)
+                    cv2.imwrite(os.path.join(output_root, os.path.basename(img_f)), img)
+                key = cv2.waitKey(0) & 0xff
+                if key == ord('q'):
+                    return
             else:
                 logging.warning('xxxx image: {} not found.'.format(img_f))
 
