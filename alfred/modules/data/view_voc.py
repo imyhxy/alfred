@@ -58,8 +58,8 @@ def get(root, name):
     return vars
 
 
-def vis_voc(img_root, label_root, label_major=True, output_root=None):
-    logging.info('img root: {}, label root: {}, output root:'.format(img_root, label_root, output_root))
+def vis_voc(img_root, label_root, label_major=True):
+    logging.info("img root: {}, label root: {}".format(img_root, label_root))
     # auto detection .jpg or .png images
     if label_major:
         logging.info(
@@ -96,12 +96,9 @@ def vis_voc(img_root, label_root, label_major=True, output_root=None):
                             img, (xmin, ymin), (xmax, ymax), (0, 255, 0), 2, 1
                         )
                     cv2.imshow("voc check", resize(img))
-                    if output_root is not None:
-                        os.makedirs(output_root, exist_ok=True)
-                        cv2.imwrite(os.path.join(output_root, os.path.basename(img_f)), img)
-                    key = cv2.waitKey(0) & 0xff
-                    if key == ord('q'):
-                        return
+                    ch = cv2.waitKey(0)
+                    if ch == 27:
+                        exit()
                 else:
                     logging.warning(
                         "xxxx image: {} for label: {} not found.".format(img_f, xml)
@@ -136,12 +133,9 @@ def vis_voc(img_root, label_root, label_major=True, output_root=None):
                             img, (xmin, ymin), (xmax, ymax), (0, 255, 0), 2, 1
                         )
                     cv2.imshow("voc check", resize(img))
-                    if output_root is not None:
-                        os.makedirs(output_root, exist_ok=True)
-                        cv2.imwrite(os.path.join(output_root, os.path.basename(img_f)), img)
-                    key = cv2.waitKey(0) & 0xff
-                    if key == ord('q'):
-                        return
+                    ch = cv2.waitKey(0)
+                    if ch == 27:
+                        exit()
                 else:
                     logging.warning(
                         "xxxx image: {} according label: {} not found.".format(

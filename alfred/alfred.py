@@ -252,8 +252,6 @@ def arg_parse():
     view_voc_parser.set_defaults(which="data-vocview")
     view_voc_parser.add_argument("--image_dir", "-i", help="Root path of VOC image.")
     view_voc_parser.add_argument("--label_dir", "-l", help="Root path of VOC label.")
-    view_voc_parser.add_argument(
-        '--output_dir', '-o', default=None, help='Root path of output directory.')
 
     view_txt_parser = data_sub_parser.add_parser("txtview", help="view voc.")
     view_txt_parser.set_defaults(which="data-txtview")
@@ -264,8 +262,6 @@ def arg_parse():
     view_txt_parser.set_defaults(which="data-yoloview")
     view_txt_parser.add_argument("--image_dir", "-i", help="Root path of VOC image.")
     view_txt_parser.add_argument("--label_dir", "-l", help="Root path of VOC label.")
-    view_txt_parser.add_argument(
-        '--output_dir', '-o', default=None, help='Root path of output directory.')
 
     view_coco_parser = data_sub_parser.add_parser("cocoview", help="view voc.")
     view_coco_parser.set_defaults(which="data-cocoview")
@@ -621,8 +617,7 @@ def main(args=None):
                 if action == "vocview":
                     image_dir = args_dict["image_dir"]
                     label_dir = args_dict["label_dir"]
-                    output_dir = args_dict['output_dir']
-                    vis_voc(img_root=image_dir, label_root=label_dir, output_root=output_dir)
+                    vis_voc(img_root=image_dir, label_root=label_dir)
                 elif action == "cocoview":
                     img_d = args_dict["image_dir"]
                     json_f = args_dict["json"]
@@ -634,8 +629,7 @@ def main(args=None):
                 elif action == "yoloview":
                     image_dir = args_dict["image_dir"]
                     label_dir = args_dict["label_dir"]
-                    output_dir = args_dict['output_dir']
-                    vis_det_yolo(img_root=image_dir, label_root=label_dir, output_root=output_dir)
+                    vis_det_yolo(img_root=image_dir, label_root=label_dir)
                 elif action == "voclabel":
                     anno_dir = args_dict["anno_dir"]
                     gather_labels(anno_dir)
