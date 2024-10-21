@@ -1,0 +1,53 @@
+host: '127.0.0.1'
+port: 9999
+
+width: 1920
+height: 1080
+
+max_human: 10
+track: True
+filter: False
+block: False # block visualization or not, True for visualize each frame, False in realtime applications
+rotate: False
+debug: False
+write: False
+out: 'none'
+
+body_model:
+  module: "alfred.vis.mesh3d.skelmodel.SkelModel"
+  args:
+    body_type: "body25"
+    joint_radius: 0.02
+
+camera:
+  phi: 0
+  theta: -30
+  cx: 3.
+  cy: 5.
+  cz: 10.
+
+scene:
+  - module: "alfred.vis.mesh3d.o3dwrapper.create_coord"
+    args:
+      camera: [0, 0, 0]
+      radius: 1.6
+      scale: 1.0
+  - module: "alfred.vis.mesh3d.o3dwrapper.create_ground"
+    args:
+      center: [0, 0, 0]
+      # xdir: [0.02, 0, 0]
+      # ydir: [0, 0.02, 0]
+      xdir: [1, 0, 0]
+      ydir: [0, 1, 0]
+      step: 1
+      xrange: 5
+      yrange: 5
+      white: [1., 1., 1.]
+      black: [0.5,0.5,0.5]
+      two_sides: True
+
+range:
+  minr: [-100, -100, -100]
+  maxr: [ 100,  100,  100]
+  rate_inlier: 0.8
+  min_conf: 0.1

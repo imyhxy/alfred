@@ -35,12 +35,25 @@ from dl.torch.common import print_tensor
 
 from varname import varname
 
+
 def a_func(num):
-    print(varname() + ': ' + str(num))
+    print(varname() + ": " + str(num))
 
 
+def clothes(func):
+    def wear():
+        print("Buy clothes!{}".format(func.__name__))
+        return func()
 
-if __name__ == '__main__':
+    return wear
+
+
+@clothes
+def body():
+    print("The body feels could!")
+
+
+if __name__ == "__main__":
     v = a_func(1098)
 
     # welcome('')

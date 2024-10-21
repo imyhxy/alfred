@@ -14,7 +14,16 @@ import logging
 import shutil
 from typing import Callable, Optional
 from urllib import request
-import cv2 as cv
+
+try:
+    import cv2 as cv
+except ImportError as e:
+    cv = None
+
+try:
+    import cv2 as cv
+except ImportError as e:
+    cv = None
 
 
 __all__ = ["PathManager", "get_cache_dir", "file_lock"]
@@ -54,12 +63,12 @@ def download(
         if progress:
             import tqdm
 
+            # todo: change tqdm to rich for download progress
+
             def hook(t: tqdm.tqdm) -> Callable[[int, int, Optional[int]], None]:
                 last_b = [0]
 
-                def inner(
-                    b: int, bsize: int, tsize: Optional[int] = None
-                ) -> None:
+                def inner(b: int, bsize: int, tsize: Optional[int] = None) -> None:
                     if tsize is not None:
                         t.total = tsize
                     t.update((b - last_b[0]) * bsize)  # type: ignore
@@ -70,9 +79,7 @@ def download(
             with tqdm.tqdm(  # type: ignore
                 unit="B", unit_scale=True, miniters=1, desc=filename, leave=True
             ) as t:
-                tmp, _ = request.urlretrieve(
-                    url, filename=tmp, reporthook=hook(t)
-                )
+                tmp, _ = request.urlretrieve(url, filename=tmp, reporthook=hook(t))
 
         else:
             tmp, _ = request.urlretrieve(url, filename=tmp)
@@ -92,9 +99,7 @@ def download(
         except IOError:
             pass
 
-    logger.info(
-        "Successfully downloaded " + fpath + ". " + str(size) + " bytes."
-    )
+    logger.info("Successfully downloaded " + fpath + ". " + str(size) + " bytes.")
     return fpath
 
 
@@ -194,9 +199,7 @@ class PathHandler:
         """
         raise NotImplementedError()
 
-    def _copy(
-        self, src_path: str, dst_path: str, overwrite: bool = False
-    ) -> bool:
+    def _copy(self, src_path: str, dst_path: str, overwrite: bool = False) -> bool:
         """
         Copies a source path to a destination path.
 
@@ -291,9 +294,7 @@ class NativePathHandler(PathHandler):
     def _open(self, path: str, mode: str = "r") -> IO[Any]:
         return open(path, mode)
 
-    def _copy(
-        self, src_path: str, dst_path: str, overwrite: bool = False
-    ) -> bool:
+    def _copy(self, src_path: str, dst_path: str, overwrite: bool = False) -> bool:
         """
         Copies a source path to a destination path.
 
@@ -307,8 +308,7 @@ class NativePathHandler(PathHandler):
         """
         if os.path.exists(dst_path) and not overwrite:
             logger = logging.getLogger(__name__)
-            logger.error(
-                "Destination file {} already exists.".format(dst_path))
+            logger.error("Destination file {} already exists.".format(dst_path))
             return False
 
         try:
@@ -359,9 +359,7 @@ class HTTPURLHandler(PathHandler):
         This implementation downloads the remote resource and caches it locally.
         The resource will only be downloaded if not previously requested.
         """
-        if path not in self.cache_map or not os.path.exists(
-            self.cache_map[path]
-        ):
+        if path not in self.cache_map or not os.path.exists(self.cache_map[path]):
             logger = logging.getLogger(__name__)
             parsed_url = urlparse(path)
             dirname = os.path.join(
@@ -381,9 +379,7 @@ class HTTPURLHandler(PathHandler):
         assert mode in (
             "r",
             "rb",
-        ), "{} does not support open with {} mode".format(
-            self.__class__.__name__, mode
-        )
+        ), "{} does not support open with {} mode".format(self.__class__.__name__, mode)
         local_path = self._get_local_path(path)
         return open(local_path, mode)
 
@@ -568,60 +564,337 @@ PathManager.register_handler(HTTPURLHandler())
 
 
 class SourceIter:
-
-    def __init__(self, src):
+    def __init__(self, src, exit_auto=True):
         self.src = src
         self.srcs = []
-        self._index = 0
+        self.crt_index = 0
+        self.crt_filename = ""
         self.video_mode = False
+        self.webcam_mode = False
         self.cap = None
+        self.ok = True
+        self.exit_auto = exit_auto
 
     def __len__(self):
         return len(self.src)
 
     def __next__(self):
-        if self.video_mode:
-            assert self.cap is not None, 'video mode on but cap is None. video open failed.'
+        if self.video_mode or self.webcam_mode:
+            assert (
+                self.cap is not None
+            ), "video mode on but cap is None. video open failed."
             ret, frame = self.cap.read()
+            self.crt_index += 1
             if not ret:
-                print('Seems iteration done. bye~')
-                exit(0)
-            return frame
+                if self.exit_auto:
+                    print("Seems iteration done. bye~")
+                    exit(0)
+                else:
+                    self.ok = False
+            else:
+                return frame
         else:
-            if self._index < len(self.srcs):
-                p = self.srcs[self._index]
-                self._index += 1
+            if self.crt_index < len(self.srcs):
+                p = self.srcs[self.crt_index]
+                self.crt_filename = os.path.basename(p)
+                self.crt_index += 1
+                self.crt_filename = os.path.basename(p)
                 return p
             else:
-                print('Seems iteration done. bye~')
-                exit(0)
+                if self.exit_auto:
+                    print("Seems iteration done. bye~")
+                    exit(0)
+                else:
+                    self.ok = False
                 # raise StopIteration
 
 
 class ImageSourceIter(SourceIter):
+    def __init__(self, src, exit_auto=True, save_res_video=False):
+        super(ImageSourceIter, self).__init__(src, exit_auto)
 
-    def __init__(self, src):
-        super(ImageSourceIter, self).__init__(src)
-        
         self._index_sources()
-        assert len(self.srcs) > 0, 'srcs indexed empty: {}'.format(self.srcs)
-    
+        self.is_written = save_res_video
+        self.save_f = None
+        assert len(self.srcs) > 0, "srcs indexed empty: {}".format(self.srcs)
+        self.lens = len(self.srcs)
+        if self.video_mode and not self.webcam_mode:
+            self.is_save_video_called = False
+            fourcc = cv.VideoWriter_fourcc(*"XVID")
+            self.video_width = int(self.cap.get(cv.CAP_PROP_FRAME_WIDTH) + 0.5)
+            self.video_frame_count = int(self.cap.get(cv.CAP_PROP_FRAME_COUNT))
+            self.video_height = int(self.cap.get(cv.CAP_PROP_FRAME_HEIGHT) + 0.5)
+            if self.video_mode:
+                self.filename = os.path.basename(src).split(".")[0]
+                self.save_f = os.path.join(
+                    os.path.dirname(src), self.filename + "_result.mp4"
+                )
+                self.lens = self.video_frame_count
+            elif self.webcam_mode:
+                os.makedirs("results", exist_ok=True)
+                self.save_f = os.path.join("results/webcam_result.mp4")
+            self.video_writter = cv.VideoWriter(
+                self.save_f, fourcc, 25.0, (self.video_width, self.video_height)
+            )
+
+    def get_specific_frames(self, frame_indexes, verbose=True):
+        """
+        get specific frames by a series frames idxes
+        CAUTION: this will drain your memory, better not use
+        """
+        frames = []
+        for i in frame_indexes:
+            self.cap.set(cv.CAP_PROP_POS_FRAMES, i - 1)
+            res, frame = self.cap.read()
+            if verbose:
+                print(f"\r{i}/{len(frame_indexes)}", end="", flush=True)
+            if res:
+                frames.append(frame)
+            else:
+                print("failed to get frame at index: ", i)
+        return frames
+
+    def get_specific_frame_at(self, frame_index):
+        self.cap.set(cv.CAP_PROP_POS_FRAMES, frame_index - 1)
+        res, frame = self.cap.read()
+        if res:
+            return frame
+        else:
+            print("get frame at failed: ", frame_index)
+            return
+
+    def get_new_video_writter(self, new_width, new_height, save_f=None):
+        """
+        for users want save a video with new width and height
+        """
+        fourcc = cv.VideoWriter_fourcc(*"XVID")
+        video_writter = cv.VideoWriter(save_f, fourcc, 25.0, (new_width, new_height))
+        return video_writter
+
     def _is_video(self, p):
-        if str(p).endswith('.mp4') or str(p).endswith('.avi'):
+        suffix = os.path.basename(p).split(".")[-1]
+        if suffix.lower() in ["mp4", "avi", "flv", "wmv", "mpeg", "mov"]:
             return True
         else:
             return False
 
-    def _index_sources(self):
-        if os.path.isfile(self.src) and self._is_video(self.src):
-            self.video_mode = True
-            self.cap = cv.VideoCapture(self.src)
-            self.srcs = [self.src]
-        elif os.path.isfile(self.src):
-            self.srcs = [self.src]
-        elif os.path.isdir(self.src):
-            for ext in ('*.bmp', '*.png', '*.jpg'):
-                self.srcs.extend(glob.glob(os.path.join(self.src, ext)))
-            # print(self.srcs)
+    def save_res_image_or_video_frame(self, res):
+        if self.video_mode:
+            self.is_save_video_called = True
+            self.video_writter.write(res)
+            if not self.is_written:
+                self.is_written = True
         else:
-            TypeError('{} must be dir or file'.format(self.src))
+            return NotImplementedError
+
+    def _index_sources(self):
+        from natsort import natsorted
+
+        if str(self.src).isdigit():
+            self.webcam_mode = True
+            self.video_mode = True
+            self.cap = cv.VideoCapture(int(self.src))
+            # self.cap = cv.VideoCapture(0)
+            self.srcs = [self.src]
+        else:
+            assert os.path.exists(self.src), f"{self.src} not exist."
+            if os.path.isfile(self.src) and self._is_video(self.src):
+                self.video_mode = True
+                self.cap = cv.VideoCapture(self.src)
+                self.srcs = [self.src]
+            elif os.path.isfile(self.src):
+                self.srcs = [self.src]
+            elif os.path.isdir(self.src):
+                for ext in ("*.bmp", "*.png", "*.jpg", "*.jpeg"):
+                    self.srcs.extend(glob.glob(os.path.join(self.src, ext)))
+                # sort srcs with natural order
+                self.srcs = natsorted(self.srcs)
+            else:
+                TypeError("{} must be dir or file".format(self.src))
+
+    def __del__(self) -> None:
+        if self.video_mode:
+            self.cap.release()
+            if not self.webcam_mode:
+                self.video_writter.release()
+            if self.is_written and self.is_save_video_called:
+                print("your wrote video result file should saved into: ", self.save_f)
+            else:
+                if self.save_f is not None:
+                    pass
+                    # if os.path.exists(self.save_f):
+                    #     # clean up remove saved file.
+                    #     os.remove(self.save_f)
+
+    def clear_early_quit(self):
+        if self.video_mode:
+            self.cap.release()
+            if not self.webcam_mode:
+                self.video_writter.release()
+            if self.is_written and self.is_save_video_called:
+                print("your wrote video result file should saved into: ", self.save_f)
+            else:
+                if self.save_f is not None:
+                    if os.path.exists(self.save_f):
+                        # clean up remove saved file.
+                        os.remove(self.save_f)
+
+    def waitKey(self):
+        if self.video_mode:
+            if cv.waitKey(1) > 0:
+                print("key pressed, exit show..")
+                self.ok = False
+                self.clear_early_quit()
+                # exit(0)
+        else:
+            cv.waitKey(0)
+    
+    def show(self, winname, img):
+        cv.imshow(winname, img)
+
+    def show(self, winname, mat):
+        cv.imshow(winname, mat)
+
+
+def next_item(iter):
+    itm = next(iter)
+    if isinstance(itm, str):
+        itm = cv.imread(itm)
+    return itm
+
+
+class ImageSourceIterAsync(SourceIter):
+    """
+    reading frames in threads if on video mode
+    using queue to to contains readed frames
+    """
+
+    def __init__(self, src, exit_auto=True):
+        super(ImageSourceIter, self).__init__(src, exit_auto)
+        import cv2 as cv
+
+        self._index_sources()
+        self.is_written = False
+        self.save_f = None
+        assert len(self.srcs) > 0, "srcs indexed empty: {}".format(self.srcs)
+        self.lens = len(self.srcs)
+        if self.video_mode and not self.webcam_mode:
+            self.is_save_video_called = False
+            fourcc = cv.VideoWriter_fourcc(*"XVID")
+            self.video_width = int(self.cap.get(cv.CAP_PROP_FRAME_WIDTH) + 0.5)
+            self.video_frame_count = int(self.cap.get(cv.CAP_PROP_FRAME_COUNT))
+            self.video_height = int(self.cap.get(cv.CAP_PROP_FRAME_HEIGHT) + 0.5)
+            if self.video_mode:
+                self.filename = os.path.basename(src).split(".")[0]
+                self.save_f = os.path.join(
+                    os.path.dirname(src), self.filename + "_result.mp4"
+                )
+            else:
+                os.makedirs("results", exist_ok=True)
+                self.save_f = os.path.join("results/webcam_result.mp4")
+            self.video_writter = cv.VideoWriter(
+                self.save_f, fourcc, 25.0, (self.video_width, self.video_height)
+            )
+
+    def get_specific_frames(self, frame_indexes, verbose=True):
+        """
+        get specific frames by a series frames idxes
+        CAUTION: this will drain your memory, better not use
+        """
+        frames = []
+        for i in frame_indexes:
+            self.cap.set(cv.CAP_PROP_POS_FRAMES, i - 1)
+            res, frame = self.cap.read()
+            if verbose:
+                print(f"\r{i}/{len(frame_indexes)}", end="", flush=True)
+            if res:
+                frames.append(frame)
+            else:
+                print("failed to get frame at index: ", i)
+        return frames
+
+    def get_specific_frame_at(self, frame_index):
+        self.cap.set(cv.CAP_PROP_POS_FRAMES, frame_index - 1)
+        res, frame = self.cap.read()
+        if res:
+            return frame
+        else:
+            print("get frame at failed: ", frame_index)
+            return
+
+    def get_new_video_writter(self, new_width, new_height, save_f=None):
+        """
+        for users want save a video with new width and height
+        """
+        fourcc = cv.VideoWriter_fourcc(*"XVID")
+        video_writter = cv.VideoWriter(save_f, fourcc, 25.0, (new_width, new_height))
+        return video_writter
+
+    def _is_video(self, p):
+        suffix = os.path.basename(p).split(".")[-1]
+        if suffix.lower() in ["mp4", "avi", "flv", "wmv", "mpeg", "mov"]:
+            return True
+        else:
+            return False
+
+    def save_res_image_or_video_frame(self, res):
+        if self.video_mode:
+            self.is_save_video_called = True
+            self.video_writter.write(res)
+            if not self.is_written:
+                self.is_written = True
+        else:
+            return NotImplementedError
+
+    def _index_sources(self):
+        from natsort import natsorted
+
+        if str(self.src).isdigit():
+            self.webcam_mode = True
+            self.video_mode = True
+            self.cap = cv.VideoCapture(int(self.src))
+            # self.cap = cv.VideoCapture(0)
+            self.srcs = [self.src]
+        else:
+            assert os.path.exists(self.src), f"{self.src} not exist."
+            if os.path.isfile(self.src) and self._is_video(self.src):
+                self.video_mode = True
+                self.cap = cv.VideoCapture(self.src)
+                self.srcs = [self.src]
+            elif os.path.isfile(self.src):
+                self.srcs = [self.src]
+            elif os.path.isdir(self.src):
+                for ext in ("*.bmp", "*.png", "*.jpg", "*.jpeg"):
+                    self.srcs.extend(glob.glob(os.path.join(self.src, ext)))
+                # sort srcs with natural order
+                self.srcs = natsorted(self.srcs)
+            else:
+                TypeError("{} must be dir or file".format(self.src))
+
+    def __del__(self) -> None:
+        if self.video_mode:
+            self.cap.release()
+            if not self.webcam_mode:
+                self.video_writter.release()
+            if self.is_written and self.is_save_video_called:
+                print("your wrote video result file should saved into: ", self.save_f)
+            else:
+                if self.save_f and os.path.exists(self.save_f):
+                    # clean up remove saved file.
+                    os.remove(self.save_f)
+
+
+def get_next_frame(iter):
+    itm = next(iter)
+    if os.path.isfile(itm):
+        itm = cv.imread(itm)
+    return itm
+
+
+def get_new_video_writter(new_width, new_height, fps=30, save_f=None):
+    """
+    for users want save a video with new width and height
+    """
+    fourcc = cv.VideoWriter_fourcc(*"XVID")
+    video_writter = cv.VideoWriter(save_f, fourcc, fps, (new_width, new_height))
+    return video_writter

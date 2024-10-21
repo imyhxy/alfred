@@ -41,9 +41,11 @@ from .resize import resize
 def vis_det_yolo(img_root, label_root, output_root=None):
     logging.info('img root: {}, label root: {}'.format(img_root, label_root))
     # auto detection .jpg or .png images
-    txt_files = glob(os.path.join(label_root, '*.txt'))
+    txt_files = glob(os.path.join(label_root, "*.txt"))
     for txt_f in txt_files:
-        img_f = os.path.join(img_root, os.path.basename(txt_f).rsplit('.', maxsplit=1)[0] + '.jpg')
+        txt_root, txt_ext = os.path.splitext(txt_f)
+        img_f = os.path.join(img_root, os.path.basename(txt_root) + ".jpg")
+        # img_f = os.path.join(img_root, os.path.basename(txt_f).rsplit('.', maxsplit=1)[0] + '.jpg')
         if not os.path.exists(img_f):
             img_f = os.path.join(img_root, os.path.basename(txt_f).rsplit('.', maxsplit=1)[0] + '.png')
         if os.path.exists(img_f):
@@ -53,29 +55,28 @@ def vis_det_yolo(img_root, label_root, output_root=None):
                 with open(txt_f) as f:
                     annos = f.readlines()
                     for ann in annos:
-                        ann = ann.strip().split(' ')
+                        ann = ann.strip().split(" ")
                         category = ann[0]
                         x = float(ann[1]) * w
                         y = float(ann[2]) * h
                         bw = float(ann[3]) * w
                         bh = float(ann[4]) * h
-                        xmin = int(x - bw/2)
-                        ymin = int(y - bh/2)
-                        xmax = int(x + bw/2)
-                        ymax = int(y + bh/2)
+                        xmin = int(x - bw / 2)
+                        ymin = int(y - bh / 2)
+                        xmax = int(x + bw / 2)
+                        ymax = int(y + bh / 2)
                         print(xmin, ymin, xmax, ymax, category)
                         cv2.putText(img, category, (xmin, ymin), cv2.FONT_HERSHEY_COMPLEX, 0.7, (255, 255, 255))
                         cv2.rectangle(img, (xmin, ymin), (xmax, ymax), (0, 255, 0), 2, 1)
-                print(img_f)
                 cv2.imshow('yolo check', resize(img))
                 if output_root is not None:
                     os.makedirs(output_root, exist_ok=True)
                     cv2.imwrite(os.path.join(output_root, os.path.basename(img_f)), img)
-                key = cv2.waitKey(0) & 0xff
-                if key == ord('q'):
-                    return
+                ch = cv2.waitKey(0)
+                if ch == 27:
+                    exit()
             else:
-                logging.warning('xxxx image: {} not found.'.format(img_f))
+                logging.warning("xxxx image: {} not found.".format(img_f))
 
 
 if __name__ == "__main__":

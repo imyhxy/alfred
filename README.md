@@ -1,16 +1,58 @@
-# Alfred
+<div align="center">
+
+<img src="https://s2.loli.net/2022/03/14/zLsIBi5xueUmnrw.png">
+
+<h1>alfred-py: Born For Deeplearning</h1>
 
 
+[![PyPI downloads](https://static.pepy.tech/personalized-badge/alfred-py?period=total&units=international_system&left_color=grey&right_color=blue&left_text=pypi%20downloads)](https://pepy.tech/project/alfred-py)
+[![Github downloads](https://img.shields.io/github/downloads/jinfagang/alfred/total?color=blue&label=Downloads&logo=github&logoColor=lightgrey)](https://img.shields.io/github/downloads/zhiqwang/yolov5-rt-stack/total?color=blue&label=Downloads&logo=github&logoColor=lightgrey)
+
+[![CI testing](https://github.com/zhiqwang/yolov5-rt-stack/actions/workflows/ci-test.yml/badge.svg)](https://github.com/zhiqwang/yolov5-rt-stack/actions/workflows/ci-test.yml)
+[![Build & deploy docs](https://github.com/zhiqwang/yolov5-rt-stack/actions/workflows/gh-pages.yml/badge.svg)](https://github.com/zhiqwang/yolov5-rt-stack/actions/workflows/gh-pages.yml)
+[![pre-commit.ci status](https://results.pre-commit.ci/badge/github/zhiqwang/yolov5-rt-stack/main.svg)](https://results.pre-commit.ci/latest/github/zhiqwang/yolov5-rt-stack/main)
+
+
+[![license](https://img.shields.io/github/license/zhiqwang/yolov5-rt-stack?color=dfd)](LICENSE)
+[![Slack](https://img.shields.io/badge/slack-chat-aff.svg?logo=slack)](https://join.slack.com/t/yolort/shared_invite/zt-mqwc7235-940aAh8IaKYeWclrJx10SA)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-pink.svg)](https://github.com/jinfagang/alfred/issues?q=is%3Aopen+is%3Aissue+label%3A%22help+wanted%22)
+
+</div>
+
+
+*alfred-py* can be called from terminal via `alfred` as a tool for deep-learning usage. It also provides massive utilities to boost your daily efficiency APIs, for instance, if you want draw a box with score and label, if you want logging in your python applications, if you want convert your model to TRT engine, just `import alfred`, you can get whatever you want. More usage you can read instructions below.
+
+
+
+## Functions Summary
+
+Since many new users of alfred maybe not very familiar with it, conclude functions here briefly, more details see my updates:
+
+- Visualization, draw boxes, masks, keypoints is very simple, even **3D** boxes on point cloud supported;
+- Command line tools, such as view your annotation data in any format (yolo, voc, coco any one);
+- Deploy, you can using alfred deploy your tensorrt models;
+- DL common utils, such as torch.device() etc;
+- Renders, render your 3D models.
+
+
+A pic visualized from alfred:
 
 ![alfred vis segmentation annotation in coco format](https://i.loli.net/2021/01/25/Dev8LXE1CWhMm9g.png)
-
-*Alfred* is command line tool for deep-learning usage. if you want split an video into image frames or combine frames into a single video, then **alfred** is what you want.
-
 
 
 ## Install
 
 To install **alfred**, it is very simple:
+
+requirements:
+
+```
+lxml [optional]
+pycocotools [optional]
+opencv-python [optional]
+
+```
+then:
 
 ```shell
 sudo pip3 install alfred-py
@@ -87,6 +129,91 @@ A glance of alfred, after you installed above package, you will have `alfred`:
 `alfred-py`　has been updating for 3 years, and it will keep going!
 
 - **2050-xxx**: *to be continue*;
+- **2023.04.28**: Update the 3d keypoints visualizer, now you can visualize Human3DM kpts in realtime:
+  ![](https://user-images.githubusercontent.com/21303438/233925339-95eddad2-1441-4567-8a15-a2364b76ce70.gif)
+  For detailes reference to `examples/demo_o3d_server.py`.
+  The result is generated from MotionBert.
+- **2022.01.18**: Now alfred support a Mesh3D visualizer server based on Open3D:
+  ```python
+  from alfred.vis.mesh3d.o3dsocket import VisOpen3DSocket
+
+  def main():
+      server = VisOpen3DSocket()
+      while True:
+          server.update()
+
+
+  if __name__ == "__main__":
+      main()
+  ```
+  Then, you just need setup a client, send keypoints3d to server, and it will automatically visualized out.
+  Here is what it looks like:
+  ![](https://s4.ax1x.com/2022/01/18/7BDUZn.gif)
+
+- **2021.12.22**: Now alfred supported keypoints visualization, almost all datasets supported in mmpose were also supported by alfred:
+  ```python
+  from alfred.vis.image.pose import vis_pose_result
+
+  # preds are poses, which is (Bs, 17, 3) for coco body
+  vis_pose_result(ori_image, preds, radius=5, thickness=2, show=True)
+  ```
+
+- **2021.12.05**: You can using `alfred.deploy.tensorrt` for tensorrt inference now:
+  ```python
+  from alfred.deploy.tensorrt.common import do_inference_v2, allocate_buffers_v2, build_engine_onnx_v3
+
+  def engine_infer(engine, context, inputs, outputs, bindings, stream, test_image):
+
+    # image_input, img_raw, _ = preprocess_np(test_image)
+    image_input, img_raw, _ = preprocess_img((test_image))
+    print('input shape: ', image_input.shape)
+    inputs[0].host = image_input.astype(np.float32).ravel()
+
+    start = time.time()
+    dets, labels, masks = do_inference_v2(context, bindings=bindings, inputs=inputs,
+                                          outputs=outputs, stream=stream, input_tensor=image_input)
+  img_f = 'demo/demo.jpg'
+  with build_engine_onnx_v3(onnx_file_path=onnx_f) as engine:
+      inputs, outputs, bindings, stream = allocate_buffers_v2(engine)
+      # Contexts are used to perform inference.
+      with engine.create_execution_context() as context:
+          print(engine.get_binding_shape(0))
+          print(engine.get_binding_shape(1))
+          print(engine.get_binding_shape(2))
+          INPUT_SHAPE = engine.get_binding_shape(0)[-2:]
+
+          print(context.get_binding_shape(0))
+          print(context.get_binding_shape(1))
+          dets, labels, masks, img_raw = engine_infer(
+              engine, context, inputs, outputs, bindings, stream, img_f)
+  ```
+  
+- **2021.11.13**: Now I add Siren SDK support!
+  ```
+  from functools import wraps
+  from alfred.siren.handler import SirenClient
+  from alfred.siren.models import ChatMessage, InvitationMessage
+
+  siren = SirenClient('daybreak_account', 'password')
+
+
+  @siren.on_received_invitation
+  def on_received_invitation(msg: InvitationMessage):
+      print('received invitation: ', msg.invitation)
+      # directly agree this invitation for robots
+
+
+  @siren.on_received_chat_message
+  def on_received_chat_msg(msg: ChatMessage):
+      print('got new msg: ', msg.text)
+      siren.publish_txt_msg('I got your message O(∩_∩)O哈哈~', msg.roomId)
+
+
+  if __name__ == '__main__':
+      siren.loop()
+  ```
+  Using this, you can easily setup a Chatbot. By using Siren client.
+
 - **2021.06.24**: Add a useful commandline tool, **change your pypi source easily!!**:
   ```
   alfred cab changesource
@@ -163,7 +290,7 @@ A glance of alfred, after you installed above package, you will have `alfred`:
 
     By this, you can convert any labeling format of each other.
 - **2020.09.08**: After a long time past, **alfred** got some updates:
-    We providing `coco2yolo` ability inside it. Users can run this command convert your data to yolo format:
+    We providing `coco2yolo` ability inside it. Users can run this command to convert your data to yolo format:
 
     ```
     alfred data coco2yolo -i images/ -j annotations/val_split_2020.json
@@ -466,4 +593,4 @@ Just try it out!!
 
 ## Copyright
 
-**Alfred** build by *Lucas Jin* with ❤️， welcome star and send PR. If you got any question, you can ask me via wechat: `jintianiloveu`, this code released under MIT license.
+**Alfred** build by *Lucas Jin* with ❤️， welcome star and send PR. If you got any question, you can ask me via wechat: `jintianiloveu`, this code released under GPL-3 license.
